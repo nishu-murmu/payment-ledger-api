@@ -1,0 +1,24 @@
+{
+  "name": "payment-ledger-api",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "dev": "bun run --hot src/index.ts"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
