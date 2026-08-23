@@ -41,7 +41,7 @@ model Product {
 }
 
 model Order {
-  id          String      @id @default(uuid())
+  id          Int      @id @default(autoincrement())
   userId      String
   status      OrderStatus @default(PENDING)
   totalAmount Int // Stored in minor units
@@ -56,8 +56,8 @@ model Order {
 }
 
 model OrderItem {
-  id           String @id @default(uuid())
-  orderId      String
+  id          Int      @id @default(autoincrement())
+  orderId      Int
   productId    Int
   quantity     Int
   priceAtOrder Int // Captures product price at the exact moment of order
