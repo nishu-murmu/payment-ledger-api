@@ -1,5 +1,6 @@
 import express, { RequestHandler } from "express"
 import { OrderStatus } from "@prisma/client"
+import { redis } from "bun"
 import { z } from "zod"
 import { requireAuth } from "../middleware/auth"
 import { createOrderSchema } from "../utils/validationSchemas"
@@ -25,6 +26,13 @@ const createOrder: RequestHandler<
         errors: z.flattenError(parsedBody.error).fieldErrors,
       })
       return
+    }
+
+    const idempotencyKey = request.headers["IdempotencyKey"] as string
+    const idempotencyKeyExists = await redis.get(idempotencyKey)
+    const responseBody = (JSON.parse(idempotencyKeyExists || "") as IdempotencyResponse).responseBody as CreateOrderResponse
+    if (idempotencyKeyExists) {
+      response.status(201).json(responseBody)
     }
 
     const requestedItems = Array.from(
@@ -117,6 +125,20 @@ const createOrder: RequestHandler<
 
     const paymentId = `pay_${crypto.randomUUID()}`
     const appBaseUrl = process.env.APP_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
+    const res = {
+      order: {
+        id: order.id,
+        status: "PENDING",
+        totalAmount: order.totalAmount,
+        items: order.items,
+      },
+      payment: {
+        paymentId,
+        webhookUrl: `${appBaseUrl}/webhooks/payments/${paymentId}`,
+      },
+    }
+
+    redis.set("", JSON.stringify(res))
 
     response.status(201).json({
       order: {

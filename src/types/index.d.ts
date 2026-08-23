@@ -69,7 +69,7 @@ type OrderItemResponse = {
 
 type CreateOrderResponse = {
   order: {
-    id: string
+    id: number
     status: "PENDING"
     totalAmount: number
     items: OrderItemResponse[]
@@ -78,4 +78,11 @@ type CreateOrderResponse = {
     paymentId: string
     webhookUrl: string
   }
+}
+
+type IdempotencyResponse = {
+  id: string,
+  key: string,
+  responseBody: CreateOrderResponse,
+  createdAt: string
 }
