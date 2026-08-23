@@ -55,6 +55,7 @@ type AuthLocals = {
 type CreateOrderItemRequest = {
   productId: number
   quantity: number
+  priceAtOrder: number
 }
 
 type CreateOrderRequestBody = {
@@ -85,4 +86,29 @@ type IdempotencyResponse = {
   key: string,
   responseBody: CreateOrderResponse,
   createdAt: string
+}
+
+type UserOrderStatusResponse = {
+  id: number
+  status: "PENDING" | "CONFIRMED" | "FAILED"
+  totalAmount: number
+  createdAt: Date
+}
+
+type UserOrdersListResponse = {
+  orders: UserOrderStatusResponse[]
+}
+
+type OrderDetailParams = {
+  id: string
+}
+
+type OrderDetailResponse = {
+  order: {
+    id: number
+    status: "PENDING" | "CONFIRMED" | "FAILED"
+    totalAmount: number
+    createdAt: Date
+    items: OrderItemResponse[]
+  }
 }

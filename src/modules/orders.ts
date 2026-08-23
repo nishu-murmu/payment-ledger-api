@@ -29,15 +29,23 @@ const createOrder: RequestHandler<
       return
     }
 
-    const idempotencyKey = request.headers["IdempotencyKey"] as string
+    const idempotencyKey = request.get("Idempotency-Key")
+
+    if (!idempotencyKey) {
+      response.status(400).json({ message: "Idempotency-Key header is required" })
+      return
+    }
+
     const idempotencyKeyExists = await redis.get(idempotencyKey)
-    const responseBody = (JSON.parse(idempotencyKeyExists || "") as IdempotencyResponse).responseBody as CreateOrderResponse
+
     if (idempotencyKeyExists) {
+      const responseBody = JSON.parse(idempotencyKeyExists) as CreateOrderResponse
       response.status(201).json(responseBody)
       return
     }
 
-    const requestedItems = Array.from(
+    const requestedItems = parsedBody.data.items
+    const stockChecks = Array.from(
       parsedBody.data.items.reduce((itemsByProductId, item) => {
         itemsByProductId.set(
           item.productId,
@@ -50,13 +58,13 @@ const createOrder: RequestHandler<
 
     const order = await prisma.$transaction(async (tx) => {
       const products = await tx.product.findMany({
-        where: { id: { in: requestedItems.map((item) => item.productId) } },
-        select: { id: true, price: true, stock: true },
+        where: { id: { in: stockChecks.map((item) => item.productId) } },
+        select: { id: true, stock: true },
       })
 
       const productsById = new Map(products.map((product) => [product.id, product]))
 
-      for (const item of requestedItems) {
+      for (const item of stockChecks) {
         const product = productsById.get(item.productId)
 
         if (!product) {
@@ -68,7 +76,7 @@ const createOrder: RequestHandler<
         }
       }
 
-      for (const item of requestedItems) {
+      for (const item of stockChecks) {
         const updatedProduct = await tx.product.updateMany({
           where: {
             id: item.productId,
@@ -88,27 +96,16 @@ const createOrder: RequestHandler<
         data: {
           userId: response.locals.user.id,
           status: OrderStatus.PENDING,
-          totalAmount: requestedItems.reduce((total, item) => {
-            const product = productsById.get(item.productId)
-
-            if (!product) {
-              return total
-            }
-
-            return total + product.price * item.quantity
-          }, 0),
+          totalAmount: requestedItems.reduce(
+            (total, item) => total + item.priceAtOrder * item.quantity,
+            0
+          ),
           items: {
             create: requestedItems.map((item) => {
-              const product = productsById.get(item.productId)
-
-              if (!product) {
-                throw new OrderError(404, `Product ${item.productId} not found`)
-              }
-
               return {
                 productId: item.productId,
                 quantity: item.quantity,
-                priceAtOrder: product.price,
+                priceAtOrder: item.priceAtOrder,
               }
             }),
           },
@@ -127,7 +124,7 @@ const createOrder: RequestHandler<
 
     const paymentId = `pay_${crypto.randomUUID()}`
     const appBaseUrl = process.env.APP_BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
-    const res = {
+    const responseBody: CreateOrderResponse = {
       order: {
         id: order.id,
         status: "PENDING",
@@ -140,19 +137,8 @@ const createOrder: RequestHandler<
       },
     }
 
-    redis.set(idempotencyKey, JSON.stringify(res), "EX", TTL_24_HOURS.toString(), "NX")
-    response.status(201).json({
-      order: {
-        id: order.id,
-        status: "PENDING",
-        totalAmount: order.totalAmount,
-        items: order.items,
-      },
-      payment: {
-        paymentId,
-        webhookUrl: `${appBaseUrl}/webhooks/payments/${paymentId}`,
-      },
-    })
+    await redis.set(idempotencyKey, JSON.stringify(responseBody), "EX", TTL_24_HOURS.toString(), "NX")
+    response.status(201).json(responseBody)
   } catch (error) {
     if (error instanceof OrderError) {
       response.status(error.statusCode).json({ message: error.message })
@@ -163,12 +149,75 @@ const createOrder: RequestHandler<
   }
 }
 
-const getCurrentUserOrders = async () => {
+const getCurrentUserOrders: RequestHandler<
+  Record<string, never>,
+  UserOrdersListResponse | ApiErrorResponse,
+  Record<string, never>,
+  Record<string, never>,
+  AuthLocals
+> = async (_request, response, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { userId: response.locals.user.id },
+      select: {
+        id: true,
+        status: true,
+        totalAmount: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    })
 
+    response.json({ orders })
+  } catch (error) {
+    next(error)
+  }
 }
 
-const getSingleOrderInfo = async () => {
+const getSingleOrderInfo: RequestHandler<
+  OrderDetailParams,
+  OrderDetailResponse | ApiErrorResponse,
+  Record<string, never>,
+  Record<string, never>,
+  AuthLocals
+> = async (request, response, next) => {
+  try {
+    const orderId = Number(request.params.id)
 
+    if (!Number.isInteger(orderId) || orderId < 1) {
+      response.status(400).json({ message: "Order id must be a positive number" })
+      return
+    }
+
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        userId: response.locals.user.id,
+      },
+      select: {
+        id: true,
+        status: true,
+        totalAmount: true,
+        createdAt: true,
+        items: {
+          select: {
+            productId: true,
+            quantity: true,
+            priceAtOrder: true,
+          },
+        },
+      },
+    })
+
+    if (!order) {
+      response.status(404).json({ message: "Order not found" })
+      return
+    }
+
+    response.json({ order })
+  } catch (error) {
+    next(error)
+  }
 }
 
 ordersRoutes.post("/", createOrder)
