@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/auth"
 import { createOrderSchema } from "../utils/validationSchemas"
 import { prisma } from "../utils"
 import { OrderError } from "../utils/errors"
+import { TTL_24_HOURS } from "../utils/constants"
 
 export const ordersRoutes = express.Router()
 ordersRoutes.use(requireAuth)
@@ -33,6 +34,7 @@ const createOrder: RequestHandler<
     const responseBody = (JSON.parse(idempotencyKeyExists || "") as IdempotencyResponse).responseBody as CreateOrderResponse
     if (idempotencyKeyExists) {
       response.status(201).json(responseBody)
+      return
     }
 
     const requestedItems = Array.from(
@@ -138,8 +140,7 @@ const createOrder: RequestHandler<
       },
     }
 
-    redis.set("", JSON.stringify(res))
-
+    redis.set(idempotencyKey, JSON.stringify(res), "EX", TTL_24_HOURS.toString(), "NX")
     response.status(201).json({
       order: {
         id: order.id,
