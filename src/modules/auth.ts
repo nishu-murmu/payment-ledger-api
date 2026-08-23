@@ -1,22 +1,12 @@
 import express, { RequestHandler } from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
-import { Prisma, PrismaClient } from "@prisma/client"
+import { Prisma } from "@prisma/client"
+import { loginSchema, registerSchema } from "../utils/validationSchemas"
 import { z } from "zod"
+import { prisma } from "../utils"
 
-const prisma = new PrismaClient()
 const saltRounds = 10
-
-const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  email: z.email("Invalid email").trim().toLowerCase(),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-})
-
-const loginSchema = z.object({
-  email: z.email("Invalid email").trim().toLowerCase(),
-  password: z.string().min(1, "Password is required"),
-})
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET

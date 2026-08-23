@@ -1,6 +1,7 @@
 import dotenv from "dotenv"
 import { authRoutes } from "./modules/auth"
 import { productsRoutes } from "./modules/products"
+import { ordersRoutes } from "./modules/orders"
 import express, { Express } from "express"
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.get("/", (_, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/products", productsRoutes);
+app.use("/orders", ordersRoutes);
 
 const host = "0.0.0.0";
 app.listen(port, host, () => {

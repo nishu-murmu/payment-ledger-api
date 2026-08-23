@@ -45,3 +45,37 @@ type ProductDetailParams = {
 type ProductDetailResponse = {
   product: ProductResponse
 }
+
+type AuthLocals = {
+  user: {
+    id: string
+  }
+}
+
+type CreateOrderItemRequest = {
+  productId: number
+  quantity: number
+}
+
+type CreateOrderRequestBody = {
+  items: CreateOrderItemRequest[]
+}
+
+type OrderItemResponse = {
+  productId: number
+  quantity: number
+  priceAtOrder: number
+}
+
+type CreateOrderResponse = {
+  order: {
+    id: string
+    status: "PENDING"
+    totalAmount: number
+    items: OrderItemResponse[]
+  }
+  payment: {
+    paymentId: string
+    webhookUrl: string
+  }
+}

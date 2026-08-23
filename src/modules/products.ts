@@ -1,8 +1,6 @@
 import express, { RequestHandler } from "express"
-import { PrismaClient } from "@prisma/client"
 import { requireAuth } from "../middleware/auth"
-
-const prisma = new PrismaClient()
+import { prisma } from "../utils"
 
 const productSelect = {
   id: true,
