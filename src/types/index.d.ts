@@ -112,3 +112,17 @@ type OrderDetailResponse = {
     items: OrderItemResponse[]
   }
 }
+
+type WebhookRequestBody = {
+  paymentId: string
+  orderId: number
+  status: string
+}
+
+type WebhookResponseBody = {
+  message: string
+}
+
+type WebhookFailedResponseBody = {
+  error: string
+}
