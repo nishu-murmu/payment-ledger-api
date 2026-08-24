@@ -13,9 +13,9 @@ export const loginSchema = z.object({
 
 
 export const webhookSchema = z.object({
-  paymentId: z.string(),
-  orderId: z.number(),
-  status: z.string()
+  paymentId: z.string().min(1),
+  orderId: z.number().int().positive(),
+  status: z.enum(["success", "failure"])
 })
 
 export const createOrderSchema = z.object({

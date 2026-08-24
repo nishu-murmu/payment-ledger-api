@@ -1,32 +1,55 @@
-import { Queue, Worker } from 'bullmq';
-import { prisma } from "../utils"
+import { Job, Queue, Worker } from "bullmq"
 
-const dlq = new Queue('post-payment-dlq');
+type PostPaymentJobData = {
+  orderId: number
+  userId: string
+  totalAmount: number
+  items: Array<{
+    productId: number
+    quantity: number
+    priceAtOrder: number
+  }>
+  paymentId?: string
+}
 
-const worker = new Worker('post-payment', async (job) => {
+const connection = getRedisConnection()
+const deadLetterQueue = new Queue("post-payment-dlq", { connection })
 
-  try {
-    const { order_item } = job.data
-    const product = await prisma.product.findFirst({
-      where: { id: order_item.productid },
-    })
+function getRedisConnection() {
+  const redisUrl = process.env.REDIS_URL
 
-    await prisma.product.update({
-      where: { id: product?.id },
-      data: {
-        stock: product!.stock - order_item?.quantity,
-        ...product
-      }
-    });
-  } catch (error) {
-    console.log(error)
+  if (!redisUrl) {
+    return { host: "127.0.0.1", port: 6379 }
   }
 
-  console.log('Order completed:', job.data);
-});
+  const url = new URL(redisUrl)
 
-worker.on('failed', async (job, err) => {
+  return {
+    host: url.hostname,
+    port: Number(url.port || 6379),
+    username: url.username || undefined,
+    password: url.password || undefined,
+  }
+}
+
+const worker = new Worker<PostPaymentJobData>(
+  "post-payment",
+  async (job: Job<PostPaymentJobData>) => {
+    console.log("Order completed:", job.data)
+  },
+  { connection }
+)
+
+worker.on("failed", async (job, error) => {
   if (job && job.attemptsMade >= 3) {
-    await dlq.add('failed-order', { ...job.data, error: err.message });
+    await deadLetterQueue.add(
+      "failed-order",
+      { ...job.data, error: error.message },
+      { removeOnComplete: false, removeOnFail: false }
+    )
   }
-});
+})
+
+worker.on("error", (error) => {
+  console.error("Post-payment worker error:", error)
+})

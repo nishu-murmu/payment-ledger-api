@@ -76,22 +76,6 @@ const createOrder: RequestHandler<
         }
       }
 
-      for (const item of stockChecks) {
-        const updatedProduct = await tx.product.updateMany({
-          where: {
-            id: item.productId,
-            stock: { gte: item.quantity },
-          },
-          data: {
-            stock: { decrement: item.quantity },
-          },
-        })
-
-        if (updatedProduct.count !== 1) {
-          throw new OrderError(409, `Insufficient stock for product ${item.productId}`)
-        }
-      }
-
       return tx.order.create({
         data: {
           userId: response.locals.user.id,
@@ -133,7 +117,7 @@ const createOrder: RequestHandler<
       },
       payment: {
         paymentId,
-        webhookUrl: `${appBaseUrl}/webhooks/payments/${paymentId}`,
+        webhookUrl: `${appBaseUrl}/webhooks/payment`,
       },
     }
 

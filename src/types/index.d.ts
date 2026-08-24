@@ -1,3 +1,9 @@
+declare namespace Express {
+  interface Request {
+    rawBody?: Buffer
+  }
+}
+
 type ApiErrorResponse = {
   message: string
   errors?: Record<string, string[] | undefined>
@@ -116,7 +122,7 @@ type OrderDetailResponse = {
 type WebhookRequestBody = {
   paymentId: string
   orderId: number
-  status: string
+  status: "success" | "failure"
 }
 
 type WebhookResponseBody = {
@@ -125,4 +131,16 @@ type WebhookResponseBody = {
 
 type WebhookFailedResponseBody = {
   error: string
+}
+
+type PostPaymentJobData = {
+  orderId: number
+  userId: string
+  totalAmount: number
+  items: Array<{
+    productId: number
+    quantity: number
+    priceAtOrder: number
+  }>
+  paymentId?: string
 }

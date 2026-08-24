@@ -1,32 +1,52 @@
-import express, { RequestHandler } from "express"
-import { Queue } from 'bullmq';
-import dotenv from "dotenv"
 import crypto from "crypto"
+import express, { RequestHandler } from "express"
+import { Queue } from "bullmq"
+import { z } from "zod"
 import { prisma } from "../utils"
 import { webhookSchema } from "../utils/validationSchemas"
-import z from "zod";
-dotenv.config()
 
 export const webhooksRoutes = express.Router()
 
-const confirmSignature = (req, res) => {
-  const verifiedSignature = req.headers["x-signature-sha256"];
-  const conirmedSignature = crypto.createHmac("sha256", process.env.SECRET_KEY).update(req.rawBody).digest("hex")
+const postPaymentQueue = new Queue("post-payment", {
+  connection: getRedisConnection(),
+})
 
-  const trustedBuffer = Buffer.from(conirmedSignature)
-  const receivedBuffer = Buffer.from(verifiedSignature)
-  if (trustedBuffer.length != receivedBuffer.length) {
-    return res.status(401).json({
-      error: "Invalid signature length"
-    })
-  }
-  const isValid = crypto.timingSafeEqual(trustedBuffer, receivedBuffer)
-  if (!isValid) {
+function getRedisConnection() {
+  const redisUrl = process.env.REDIS_URL
 
-    return res.status(401).json({
-      error: "Invalid signature"
-    })
+  if (!redisUrl) {
+    return { host: "127.0.0.1", port: 6379 }
   }
+
+  const url = new URL(redisUrl)
+
+  return {
+    host: url.hostname,
+    port: Number(url.port || 6379),
+    username: url.username || undefined,
+    password: url.password || undefined,
+  }
+}
+
+function verifyPaymentSignature(request: Parameters<RequestHandler>[0]) {
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET
+  const signature = request.get("x-signature-sha256")
+  const rawBody = request.rawBody
+
+  if (!secret || !signature || !rawBody) {
+    return false
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex")
+
+  const expectedBuffer = Buffer.from(expectedSignature, "hex")
+  const receivedBuffer = Buffer.from(signature, "hex")
+
+  return expectedBuffer.length === receivedBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
 }
 
 const paymentConfirmationWebhook: RequestHandler<
@@ -35,44 +55,108 @@ const paymentConfirmationWebhook: RequestHandler<
   WebhookRequestBody
 > = async (request, response, next) => {
   try {
-    const isConfirmed = confirmSignature(request, response)
-    if (isConfirmed) {
-      const postPaymentQueue = new Queue('post-payment');
-      const parsedBody = webhookSchema.safeParse(request.body)
-
-      if (!parsedBody.success) {
-        response.status(400).json({
-          message: "Invalid request body",
-          errors: z.flattenError(parsedBody.error).fieldErrors,
-        })
-        return
-      }
-      const { paymentId, orderId, status } = parsedBody.data
-
-      const order = await prisma.order.findFirst({
-        where: { id: orderId },
-      })
-      if (status == "success") {
-        postPaymentQueue.add('order', {
-          orderId,
-          userId: order?.userId,
-          paymentId
-        }, {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnFail: false
-        });
-
-      } else {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: {
-            status: "FAILED",
-            ...order
-          }
-        });
-      }
+    if (!verifyPaymentSignature(request)) {
+      response.status(401).json({ message: "Invalid signature" })
+      return
     }
+
+    const parsedBody = webhookSchema.safeParse(request.body)
+
+    if (!parsedBody.success) {
+      response.status(400).json({
+        message: "Invalid request body",
+        errors: z.flattenError(parsedBody.error).fieldErrors,
+      })
+      return
+    }
+
+    const { paymentId, orderId, status } = parsedBody.data
+
+    if (status === "failure") {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: "FAILED" },
+      })
+
+      response.json({ message: "Payment failure processed" })
+      return
+    }
+
+    const confirmedOrder = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: {
+          id: orderId,
+          status: "PENDING",
+        },
+        include: {
+          items: {
+            select: {
+              productId: true,
+              quantity: true,
+              priceAtOrder: true,
+            },
+          },
+        },
+      })
+
+      if (!order) {
+        return null
+      }
+
+      for (const item of order.items) {
+        const updatedProduct = await tx.product.updateMany({
+          where: {
+            id: item.productId,
+            stock: { gte: item.quantity },
+          },
+          data: {
+            stock: { decrement: item.quantity },
+          },
+        })
+
+        if (updatedProduct.count !== 1) {
+          throw new Error(`Insufficient stock for product ${item.productId}`)
+        }
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: { status: "CONFIRMED" },
+        include: {
+          items: {
+            select: {
+              productId: true,
+              quantity: true,
+              priceAtOrder: true,
+            },
+          },
+        },
+      })
+    })
+
+    if (!confirmedOrder) {
+      response.status(404).json({ message: "Pending order not found" })
+      return
+    }
+
+    await postPaymentQueue.add(
+      "completed-order",
+      {
+        orderId: confirmedOrder.id,
+        userId: confirmedOrder.userId,
+        totalAmount: confirmedOrder.totalAmount,
+        items: confirmedOrder.items,
+        paymentId,
+      },
+      {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 1000 },
+        removeOnComplete: false,
+        removeOnFail: false,
+      }
+    )
+
+    response.json({ message: "Payment success processed" })
   } catch (error) {
     next(error)
   }
