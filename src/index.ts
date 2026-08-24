@@ -3,6 +3,7 @@ import { authRoutes } from "./modules/auth"
 import { productsRoutes } from "./modules/products"
 import { ordersRoutes } from "./modules/orders"
 import { webhooksRoutes } from "./modules/webhooks"
+import { ledgerRoutes } from "./modules/ledger"
 import express, { Express } from "express"
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use("/auth", authRoutes);
 app.use("/products", productsRoutes);
 app.use("/orders", ordersRoutes);
 app.use("/webhooks", webhooksRoutes);
+app.use("/ledger", ledgerRoutes);
 
 const host = "0.0.0.0";
 app.listen(port, host, () => {

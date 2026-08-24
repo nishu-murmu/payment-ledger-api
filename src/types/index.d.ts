@@ -144,3 +144,21 @@ type PostPaymentJobData = {
   }>
   paymentId?: string
 }
+
+type LedgerOrderResponse = {
+  id: number
+  amountPaid: number
+  status: "PENDING" | "CONFIRMED" | "FAILED"
+  createdAt: Date
+  items: OrderItemResponse[]
+}
+
+type LedgerHistoryResponse = {
+  orders: LedgerOrderResponse[]
+}
+
+type LedgerSummaryResponse = {
+  totalSpent: number
+  successfulOrders: number
+  failedOrders: number
+}
