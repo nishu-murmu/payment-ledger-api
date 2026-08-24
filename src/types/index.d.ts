@@ -1,0 +1,164 @@
+declare namespace Express {
+  interface Request {
+    rawBody?: Buffer
+  }
+}
+
+type ApiErrorResponse = {
+  message: string
+  errors?: Record<string, string[] | undefined>
+}
+
+type AuthUserResponse = {
+  id: string
+  name: string
+  email: string
+  createdAt: Date
+}
+
+type RegisterRequestBody = {
+  name: string
+  email: string
+  password: string
+}
+
+type LoginRequestBody = {
+  email: string
+  password: string
+}
+
+type AuthResponse = {
+  token: string
+  user: AuthUserResponse
+}
+
+type ProductResponse = {
+  id: number
+  name: string
+  description: string | null
+  price: number
+  stock: number
+}
+
+type ProductsListResponse = {
+  products: ProductResponse[]
+}
+
+type ProductDetailParams = {
+  id: string
+}
+
+type ProductDetailResponse = {
+  product: ProductResponse
+}
+
+type AuthLocals = {
+  user: {
+    id: string
+  }
+}
+
+type CreateOrderItemRequest = {
+  productId: number
+  quantity: number
+  priceAtOrder: number
+}
+
+type CreateOrderRequestBody = {
+  items: CreateOrderItemRequest[]
+}
+
+type OrderItemResponse = {
+  productId: number
+  quantity: number
+  priceAtOrder: number
+}
+
+type CreateOrderResponse = {
+  order: {
+    id: number
+    status: "PENDING"
+    totalAmount: number
+    items: OrderItemResponse[]
+  }
+  payment: {
+    paymentId: string
+    webhookUrl: string
+  }
+}
+
+type IdempotencyResponse = {
+  id: string,
+  key: string,
+  responseBody: CreateOrderResponse,
+  createdAt: string
+}
+
+type UserOrderStatusResponse = {
+  id: number
+  status: "PENDING" | "CONFIRMED" | "FAILED"
+  totalAmount: number
+  createdAt: Date
+}
+
+type UserOrdersListResponse = {
+  orders: UserOrderStatusResponse[]
+}
+
+type OrderDetailParams = {
+  id: string
+}
+
+type OrderDetailResponse = {
+  order: {
+    id: number
+    status: "PENDING" | "CONFIRMED" | "FAILED"
+    totalAmount: number
+    createdAt: Date
+    items: OrderItemResponse[]
+  }
+}
+
+type WebhookRequestBody = {
+  paymentId: string
+  orderId: number
+  status: "success" | "failure"
+}
+
+type WebhookResponseBody = {
+  message: string
+}
+
+type WebhookFailedResponseBody = {
+  error: string
+}
+
+type PostPaymentJobData = {
+  orderId: number
+  userId: string
+  totalAmount: number
+  items: Array<{
+    productId: number
+    quantity: number
+    priceAtOrder: number
+  }>
+  paymentId?: string
+}
+
+type LedgerOrderResponse = {
+  id: number
+  amountPaid: number
+  status: "PENDING" | "CONFIRMED" | "FAILED"
+  createdAt: Date
+  items: OrderItemResponse[]
+}
+
+type LedgerHistoryResponse = {
+  orders: LedgerOrderResponse[]
+}
+
+type LedgerSummaryResponse = {
+  totalSpent: number
+  successfulOrders: number
+  failedOrders: number
+}
