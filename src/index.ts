@@ -28,7 +28,9 @@ app.use("/orders", ordersRoutes);
 app.use("/webhooks", webhooksRoutes);
 app.use("/ledger", ledgerRoutes);
 
-const host = "0.0.0.0";
-app.listen(port, host, () => {
-  console.log(`Server listening on ${port}`)
-})
+if (process.env.NODE_ENV !== "test") {
+  const host = "0.0.0.0";
+  app.listen(port, host, () => {
+    console.log(`Server listening on ${port}`)
+  })
+}

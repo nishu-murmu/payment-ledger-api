@@ -1,12 +1,12 @@
 import express, { RequestHandler } from "express"
 import { OrderStatus } from "@prisma/client"
-import { redis } from "bun"
 import { z } from "zod"
 import { requireAuth } from "../middleware/auth"
 import { createOrderSchema } from "../utils/validationSchemas"
 import { prisma } from "../utils"
 import { OrderError } from "../utils/errors"
 import { TTL_24_HOURS } from "../utils/constants"
+import { redis } from "../utils/redis"
 
 export const ordersRoutes = express.Router()
 ordersRoutes.use(requireAuth)
