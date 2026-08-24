@@ -12,6 +12,12 @@ export const loginSchema = z.object({
 })
 
 
+export const webhookSchema = z.object({
+  paymentId: z.string(),
+  orderId: z.number(),
+  status: z.string()
+})
+
 export const createOrderSchema = z.object({
   items: z.array(
     z.object({
